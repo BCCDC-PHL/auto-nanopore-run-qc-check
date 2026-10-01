@@ -36,13 +36,7 @@ def find_run_dirs(config: Config, check_upload_complete: bool=True) -> Iterator[
 
         for subdir in subdirs:
             run_id = subdir.name
-            instrument_type = instrument.determine_instrument_type(run_id)
-            
-
-            run_parameters = {}
-            run_parameters_path = os.path.join(subdir, 'RunParameters.xml')
-            if os.path.exists(run_parameters_path):
-                run_parameters = parsers.parse_run_parameters_xml(run_parameters_path, instrument_type)
+            instrument_type = instrument.determine_instrument_type(run_id)  
                     
             upload_complete = os.path.exists(os.path.join(subdir, 'upload_complete.json'))
             not_excluded = False
@@ -66,7 +60,6 @@ def find_run_dirs(config: Config, check_upload_complete: bool=True) -> Iterator[
                 run['path'] = os.path.abspath(subdir.path)
                 run['sequencing_run_id'] = run_id
                 run['instrument_type'] = instrument_type
-                run['run_parameters'] = run_parameters
                 yield run
             else:
                 log.debug({"event_type": "directory_skipped", "run_directory_path": os.path.abspath(subdir.path), "conditions_checked": conditions_checked})
@@ -127,6 +120,24 @@ def scan(config: Config) -> Iterator[Optional[dict]]:
     for run_dir in find_run_dirs(config):    
         yield run_dir
 
+def collect_qc_metrics(run: dict):
+    """
+    """
+    run_dir = run.get('path')
+    run_id = os.path.basename(run_dir)
+    minknow_report_json_path = None
+    minknow_report_json_glob = os.path.join(str(run_dir), 'report_*.json')
+    minknow_reports = glob.glob(minknow_report_json_glob)
+    if len(minknow_reports) == 1:
+        minknow_report_json_path = minknow_reports[0]
+        log.info({"event_type": "found_minknow_report", "sequencing_run_id": run_id, "minknow_report_path": minknow_report_json_path})
+    else:
+        log.error({"event_type": "failed_to_find_minknow_report", "sequencing_run_id": run_id})
+        return None
+    qc_metrics = parsers.parse_minknow_report(minknow_report_json_path, run_id)
+
+    return qc_metrics
+
 
 def qc_check(config: Config, run: dict) -> Optional[dict]:
     """
@@ -139,89 +150,69 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
     run_id = run['sequencing_run_id']
     run_dir = Path(run['path'])
 
-    interop_command = [
-        'interop_summary',
-        run['path'],
-        '--csv=1',
-    ]
-    interop_cmd_str = " ".join(interop_command)
-    log.info({"event_type": "qc_check_started", "sequencing_run_id": run_id, "interop_command": interop_cmd_str})
+    log.info({"event_type": "qc_check_started", "sequencing_run_id": run_id})
     timestamp_qc_check_started = datetime.datetime.now().isoformat()
     timestamp_qc_check_completed = None
 
     qc_check_complete = False
-    interop_result = None
-    try:
-        interop_result = subprocess.run(interop_command, capture_output=True, check=True, text=True)
-        if interop_result.returncode == 0:
-            qc_check_complete = True
-            timestamp_qc_check_completed = datetime.datetime.now().isoformat()
-        log.info({"event_type": "qc_check_completed", "sequencing_run_id": run_id, "interop_command": interop_cmd_str})
-    except subprocess.CalledProcessError as e:
-        log.error({"event_type": "qc_check_failed", "sequencing_run_id": run_id, "interop_command": interop_cmd_str})
 
     qc_check_result = None
-    if qc_check_complete and interop_result:
-        summary_lines = interop_result.stdout.splitlines()
-        qc_metrics = parsers.parse_interop_summary(summary_lines)
-        sum_sample_fastq_file_sizes = get_sum_sample_fastq_file_sizes(run)
-        qc_metrics['SumSampleFastqFileSizesMb'] = round(sum_sample_fastq_file_sizes, 2)
-        qc_metrics_output_path = os.path.join(run['path'], run_id + '_qc_metrics.json')
-        with open(qc_metrics_output_path, 'w') as f:
-            json.dump(qc_metrics, f, indent=2)
-            f.write("\n")
-        qc_check_result = {}
-        qc_check_result['checked_metrics'] = []
-        for qc_threshold in config.qc_thresholds:
-            instrument_type_matches = qc_threshold.get('instrument_type', '').lower() == run['instrument_type']
-            instrument_type_not_specified = 'instrument_type' not in qc_threshold
-            flowcell_version_matches = qc_threshold.get('flowcell_version', '') == run['run_parameters'].get('flowcell_version', None)
-            flowcell_version_not_specified = 'flowcell_version' not in qc_threshold
-            qc_threshold_application_conditions_met = [
-                (instrument_type_matches or instrument_type_not_specified),
-                (flowcell_version_matches or flowcell_version_not_specified),
-            ]
-            if all(qc_threshold_application_conditions_met):
-                metric = qc_threshold['metric']
-                threshold = qc_threshold['threshold']
-                checked_metric = {}
-                checked_metric['metric'] = metric
-                checked_metric['value'] = qc_metrics[metric]
-                checked_metric['threshold'] = threshold
-                checked_metric['pass_above_or_below'] = qc_threshold['pass_above_or_below']
-                if qc_threshold['pass_above_or_below'] == 'above':
-                    if qc_metrics[metric] >= threshold:
-                        checked_metric['pass_fail'] = "PASS"
-                    else:
-                        checked_metric['pass_fail'] = "FAIL"
-                elif qc_threshold['pass_above_or_below'] == 'below':
-                    if qc_metrics[metric] <= threshold:
-                        checked_metric['pass_fail'] = "PASS"
-                    else:
-                        checked_metric['pass_fail'] = "FAIL"
-                qc_check_result['checked_metrics'].append(checked_metric)
+    qc_metrics = collect_qc_metrics(run)
+    # sum_sample_fastq_file_sizes = get_sum_sample_fastq_file_sizes(run)
+    # qc_metrics['SumSampleFastqFileSizesMb'] = round(sum_sample_fastq_file_sizes, 2)
+    qc_metrics_output_path = os.path.join(run['path'], run_id + '_qc_metrics.json')
+    with open(qc_metrics_output_path, 'w') as f:
+        json.dump(qc_metrics, f, indent=2)
+        f.write("\n")
+    qc_check_result = {}
+    qc_check_result['checked_metrics'] = []
+    for qc_threshold in config.qc_thresholds:
+        instrument_type_matches = qc_threshold.get('instrument_type', '').lower() == run['instrument_type']
+        instrument_type_not_specified = 'instrument_type' not in qc_threshold
+        qc_threshold_application_conditions_met = [
+            (instrument_type_matches or instrument_type_not_specified)
+        ]
+        if all(qc_threshold_application_conditions_met):
+            metric = qc_threshold['metric']
+            threshold = qc_threshold['threshold']
+            checked_metric = {}
+            checked_metric['metric'] = metric
+            checked_metric['value'] = qc_metrics[metric]
+            checked_metric['threshold'] = threshold
+            checked_metric['pass_above_or_below'] = qc_threshold['pass_above_or_below']
+            if qc_threshold['pass_above_or_below'] == 'above':
+                if qc_metrics[metric] >= threshold:
+                    checked_metric['pass_fail'] = "PASS"
+                else:
+                    checked_metric['pass_fail'] = "FAIL"
+            elif qc_threshold['pass_above_or_below'] == 'below':
+                if qc_metrics[metric] <= threshold:
+                    checked_metric['pass_fail'] = "PASS"
+                else:
+                    checked_metric['pass_fail'] = "FAIL"
+            qc_check_result['checked_metrics'].append(checked_metric)
 
-        qc_check_result['overall_pass_fail'] = "FAIL"
-        qc_pass_conditions_met = [m['pass_fail'] == "PASS" for m in qc_check_result['checked_metrics']]
-        if all(qc_pass_conditions_met):
-            qc_check_result['overall_pass_fail'] = "PASS"
-        qc_check_result['sequencing_run_id'] = run_id
-        qc_check_result['instrument_type'] = run['instrument_type']
-        qc_check_result['run_parameters'] = run['run_parameters']
-        qc_check_result['timestamp_qc_check_started'] = timestamp_qc_check_started
-        qc_check_result['timestamp_qc_check_completed'] = timestamp_qc_check_completed
-        qc_check_complete_output_path = os.path.join(run['path'], 'qc_check_complete.json')
-        with open(qc_check_complete_output_path, 'w') as f:
-            json.dump(qc_check_result, f, indent=2)
-            f.write("\n")
-        log.info({"event_type": "qc_check_complete", "sequencing_run_id": run_id, "qc_check_result": qc_check_result['overall_pass_fail']})
+    qc_check_result['overall_pass_fail'] = "FAIL"
+    qc_pass_conditions_met = [m['pass_fail'] == "PASS" for m in qc_check_result['checked_metrics']]
+    if all(qc_pass_conditions_met):
+        qc_check_result['overall_pass_fail'] = "PASS"
+    qc_check_result['sequencing_run_id'] = run_id
+    qc_check_result['instrument_type'] = run['instrument_type']
+    qc_check_result['run_parameters'] = run['run_parameters']
+    qc_check_result['timestamp_qc_check_started'] = timestamp_qc_check_started
+    qc_check_result['timestamp_qc_check_completed'] = timestamp_qc_check_completed
+    qc_check_complete_output_path = os.path.join(run['path'], 'qc_check_complete.json')
+    with open(qc_check_complete_output_path, 'w') as f:
+        json.dump(qc_check_result, f, indent=2)
+        f.write("\n")
+    log.info({"event_type": "qc_check_complete", "sequencing_run_id": run_id, "qc_check_result": qc_check_result['overall_pass_fail']})
 
-        notification_emails_enabled = config.notification.get('send_notification_emails', False)
-        if  notification_emails_enabled:
-            try:
-                send_notification_email(run_dir, config.notification)
-                log.info({"event_type": "send_notification_email_complete", "sequencing_run_id": run_id, "qc_check_result": qc_check_result.get('overall_pass_fail', "Unknown")})
-            except Exception as e:
-                log.error({"event_type": "send_notification_email_failed", "sequencing_run_id": run_id, "exception": str(e)})
+    notification_emails_enabled = config.notification.get('send_notification_emails', False)
+    if  notification_emails_enabled:
+        try:
+            send_notification_email(run_dir, config.notification)
+            log.info({"event_type": "send_notification_email_complete", "sequencing_run_id": run_id, "qc_check_result": qc_check_result.get('overall_pass_fail', "Unknown")})
+        except Exception as e:
+            log.error({"event_type": "send_notification_email_failed", "sequencing_run_id": run_id, "exception": str(e)})
 
     return qc_check_result
