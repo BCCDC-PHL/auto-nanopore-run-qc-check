@@ -1,0 +1,30 @@
+{
+    "excluded_runs_list": "excluded_runs.csv",
+    "scan_interval_seconds": 10,
+    "notification": {
+        "system_config_file": "/path/to/notification/config.json",
+        "recipient_email_addresses": [
+            "someone@example.org"
+        ],
+        "send_notification_emails": true
+    },
+    "run_parent_dirs": [
+        "/path/to/GX01234/26"
+    ],
+    "qc_thresholds": [
+        {
+            "metric": "PercentReadsPassed",
+            "threshold": 70,
+            "pass_above_or_below": "above"        },
+        {
+            "metric": "EstimatedReadN50",
+            "threshold": 4000,
+            "pass_above_or_below": "above"
+        },
+        {
+            "metric": "ReadsGenerated",
+            "threshold": 100000,
+            "pass_above_or_below": "above"
+	}
+    ]
+}
