@@ -109,20 +109,29 @@ def _collect_email_data(run_dir: Path, qc_check_complete_filename: str = "qc_che
     :param qc_check_complete_filename: The filename of the QC Check Complete file to look for (default: `qc_check_complete.json`)
     :return: The collected data
     """
-    email_data = {'num_samples_by_project_id': {}}
+    run_id = run_dir.name
+    email_data = {}
     qc_check_complete_path = run_dir / qc_check_complete_filename
+    if not os.path.exists(qc_check_complete_path):
+        log.error({"event_type": "failed_to_find_qc_check_complete_file",
+                   "sequencing_run_id": run_id,
+                   "run_dir": run_dir})
+        return email_data
+
     with open(qc_check_complete_path, 'r') as f:
         email_data = json.load(f)
 
-    run_id = run_dir.name
     if 'sequencing_run_id' not in email_data:
         email_data['sequencing_run_id'] = run_id
+    if 'num_samples_by_project_id' not in email_data:
+        email_data['num_samples_by_project_id'] = {}
 
     samplesheet_path = samplesheet.find_samplesheet_path(run_dir)
     instrument_type = instrument.determine_instrument_type(run_id)
 
     if samplesheet_path and os.path.exists(samplesheet_path):
         parsed_samplesheet = samplesheet.parse_samplesheet(samplesheet_path, instrument_type)
+        log.debug({"hello": "world"})
         email_data['num_samples_by_project_id'] = parsed_samplesheet.get('num_samples_by_project_id', {})
 
     return email_data
@@ -143,7 +152,6 @@ def send_notification_email(run_dir: os.PathLike, notification_config: dict) -> 
     email_data = _collect_email_data(run_dir)
     log.debug({"event_type": "collected_email_data", "email_data": email_data})
 
-    sequencing_run_id = email_data['sequencing_run_id']
     email_body = _prepare_email_body(email_data, notification_config)
         
     email_url = notification_config['email_url']

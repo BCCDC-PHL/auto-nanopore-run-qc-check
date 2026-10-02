@@ -36,6 +36,8 @@
 
   {% if overall_pass_fail == 'PASS' %}
   <h1 class="qc-pass">
+    {% elif overall_pass_fail == 'UNDETERMINED' %}
+  <h1 class="qc-warning">
     {% elif overall_pass_fail == 'FAIL' %}
   <h1 class="qc-fail">
   {% endif %}
@@ -60,6 +62,8 @@
 	<td style="text-align:right;">{{ metric.threshold }}</td>
         {% if metric.pass_fail == 'PASS' %}
         <td class="qc-pass">
+	  {% elif metric.pass_fail == 'UNDETERMINED' %}
+	<td class="qc-warning">
           {% elif metric.pass_fail == 'FAIL' %}
         <td class="qc-fail">
         {% endif %}
@@ -75,7 +79,7 @@
     <thead>
       <tr>
         <th>Project ID</th>
-        <th style="text-align:right;">Num. Samples</th>
+        <th>Num. Samples</th>
       </tr>
     </thead>
     <tbody>
@@ -89,7 +93,7 @@
   </table>
 
   <p>
-    Please contact the bioinformatics team if you have any questions: BCCDCBioinformatics@bccdc.ca
+    Please contact the bioinformatics team if you have any questions: <a href="mailto:BCCDCBioinformatics@bccdc.ca?subject=QC Check on Nanopore run {{ sequencing_run_id }}">BCCDCBioinformatics@bccdc.ca</a>
   </p>
 
 </body>

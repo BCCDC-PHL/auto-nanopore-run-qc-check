@@ -74,33 +74,19 @@ def get_sum_sample_fastq_file_sizes(run: dict) -> float:
     :return: Sum of all sample fastq file sizes in the run directory.
     """
     sum_sample_fastq_file_sizes = 0.0
-    latest_fastq_path = None
-    if run['instrument_type'] == 'miseq':
-        fastq_paths_glob = os.path.join(run['path'], 'Alignment_*', '*', 'Fastq')
-        fastq_paths = glob.glob(fastq_paths_glob)
-        latest_fastq_path = sorted(fastq_paths)[-1]
-    elif run['instrument_type'] == 'nextseq':
-        fastq_paths_glob = os.path.join(run['path'], 'Analysis', '*', 'Data', 'fastq')
-        fastq_paths = glob.glob(fastq_paths_glob)
-        if len(fastq_paths) > 0:
-            latest_fastq_path = sorted(fastq_paths)[-1]
-    elif run['instrument_type'] == 'i100':
-        fastq_paths_glob = os.path.join(run['path'], 'Analysis', '*', 'Data', 'BCLConvert', 'fastq')
-        fastq_paths = glob.glob(fastq_paths_glob)
-        if len(fastq_paths) > 0:
-            latest_fastq_path = sorted(fastq_paths)[-1]
+    fastq_path = os.path.join(run['path'], 'fastq_pass')
 
-    if not latest_fastq_path:
+    if not os.path.exists(fastq_path):
         log.error({"event_type": "no_fastq_paths_found", "sequencing_run_id": run['sequencing_run_id']})
         return sum_sample_fastq_file_sizes
 
-    fastq_files_glob = os.path.join(latest_fastq_path, '*.f*q.gz')
+    fastq_files_glob = os.path.join(fastq_path, '*', '*.f*q.gz')
     fastq_files = glob.glob(fastq_files_glob)
 
     for fastq_file in fastq_files:
         file_basename = os.path.basename(fastq_file)
-        library_id = file_basename.split('_')[0]
-        if library_id != 'Undetermined':
+        library_id = file_basename.split('_')[2]
+        if not library_id.startswith('barcode'):
             file_size_mb = os.path.getsize(fastq_file) / (1024 * 1024)
             sum_sample_fastq_file_sizes += file_size_mb
 
@@ -164,8 +150,8 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
 
     qc_check_result = None
     qc_metrics = collect_qc_metrics(run)
-    # sum_sample_fastq_file_sizes = get_sum_sample_fastq_file_sizes(run)
-    # qc_metrics['SumSampleFastqFileSizesMb'] = round(sum_sample_fastq_file_sizes, 2)
+    sum_sample_fastq_file_sizes = get_sum_sample_fastq_file_sizes(run)
+    qc_metrics['SumSampleFastqFileSizesMb'] = round(sum_sample_fastq_file_sizes, 2)
     qc_metrics_output_path = os.path.join(run['path'], run_id + '_qc_metrics.json')
     with open(qc_metrics_output_path, 'w') as f:
         json.dump(qc_metrics, f, indent=2)
@@ -183,7 +169,10 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
             threshold = qc_threshold['threshold']
             checked_metric = {}
             checked_metric['metric'] = metric
+            checked_metric['threshold'] = threshold
+            checked_metric['pass_above_or_below'] = qc_threshold['pass_above_or_below']
             checked_metric['value'] = qc_metrics.get(metric)
+
             if not checked_metric.get('value'):
                 log.error({'event_type': 'failed_to_compare_metric_value',
                            'sequencing_run_id': run_id,
@@ -191,8 +180,7 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
                 checked_metric['pass_fail'] = "UNDETERMINED"
                 qc_check_result['checked_metrics'].append(checked_metric)
                 continue
-            checked_metric['threshold'] = threshold
-            checked_metric['pass_above_or_below'] = qc_threshold['pass_above_or_below']
+
             if qc_threshold['pass_above_or_below'] == 'above':
                 if qc_metrics[metric] >= threshold:
                     checked_metric['pass_fail'] = "PASS"
@@ -205,10 +193,18 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
                     checked_metric['pass_fail'] = "FAIL"
             qc_check_result['checked_metrics'].append(checked_metric)
 
-    qc_check_result['overall_pass_fail'] = "FAIL"
+    qc_check_result['overall_pass_fail'] = "UNDETERMINED"
     qc_pass_conditions_met = [m['pass_fail'] == "PASS" for m in qc_check_result['checked_metrics']]
+
     if all(qc_pass_conditions_met):
         qc_check_result['overall_pass_fail'] = "PASS"
+
+    for result in qc_check_result['checked_metrics']:
+        if result.get('pass_fail', '') == "FAIL":
+            qc_check_result['overall_pass_fail'] = "FAIL"
+
+    timestamp_qc_check_completed = datetime.datetime.now().isoformat()
+
     qc_check_result['sequencing_run_id'] = run_id
     qc_check_result['instrument_type'] = run['instrument_type']
     qc_check_result['timestamp_qc_check_started'] = timestamp_qc_check_started
@@ -217,7 +213,9 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
     with open(qc_check_complete_output_path, 'w') as f:
         json.dump(qc_check_result, f, indent=2)
         f.write("\n")
-    log.info({"event_type": "qc_check_complete", "sequencing_run_id": run_id, "qc_check_result": qc_check_result['overall_pass_fail']})
+    log.info({"event_type": "qc_check_complete",
+              "sequencing_run_id": run_id,
+              "qc_check_result": qc_check_result['overall_pass_fail']})
 
     notification_emails_enabled = config.notification.get('send_notification_emails', False)
     if  notification_emails_enabled:

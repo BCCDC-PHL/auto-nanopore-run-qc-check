@@ -11,6 +11,8 @@ from auto_nanopore_run_qc_check.model import InstrumentType
 
 from typing import Optional, Iterator
 
+log = logging.getLogger(__name__)
+
 def find_samplesheet_path(run_dir: Path) -> Optional[Path]:
     """
     Given a run directory path, find the path to the SampleSheet.csv file that can be used
@@ -23,7 +25,7 @@ def find_samplesheet_path(run_dir: Path) -> Optional[Path]:
     run_id = run_dir.name
     instrument_type = instrument.determine_instrument_type(run_id)
 
-    samplesheet_paths_glob = 'sample_sheet_*.csv'
+    samplesheet_paths_glob = os.path.join(run_dir, 'sample_sheet_*.csv')
 
     samplesheets_found = glob.glob(samplesheet_paths_glob)
     if len(samplesheets_found) == 0:
@@ -35,16 +37,24 @@ def find_samplesheet_path(run_dir: Path) -> Optional[Path]:
 
     return samplesheet_path
 
-
     
 def parse_samplesheet(samplesheet_path: Path, instrument_type: InstrumentType) -> list[dict]:
     """
     Parse a SampleSheet, given the path to the SampleSheet file and the Instrument type.
     """
-    parsed_samplesheet = []
+    parsed_samplesheet = {'num_samples_by_project_id': {}}
+    samplesheet_rows = []
     with open(samplesheet_path, 'r') as f:
         reader = csv.DictReader(f)
         for row in reader:
-            parsed_samplesheet.append(row)
+            samplesheet_rows.append(row)
+
+    for row in samplesheet_rows:
+        sample_alias = row['alias']
+        sample_id, project_id = sample_alias.split('_', 1)
+        if project_id not in parsed_samplesheet['num_samples_by_project_id']:
+            parsed_samplesheet['num_samples_by_project_id'][project_id] = 1
+        else:
+            parsed_samplesheet['num_samples_by_project_id'][project_id] += 1
     
     return parsed_samplesheet

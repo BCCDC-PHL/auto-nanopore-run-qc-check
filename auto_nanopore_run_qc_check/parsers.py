@@ -53,6 +53,6 @@ def parse_minknow_report(minknow_report_path: Path, run_id: str):
     minknow_report['num_sequencing_acquisitions'] = num_sequencing_acquisitions
     minknow_report['total_reads'] = total_basecalled_read_count
     minknow_report['total_passed_reads'] = total_basecalled_pass_read_count
-    minknow_report['percent_reads_passed'] = percent_basecalled_reads_passed
+    minknow_report['percent_reads_passed'] = round(percent_basecalled_reads_passed, 3)
     
     return minknow_report
