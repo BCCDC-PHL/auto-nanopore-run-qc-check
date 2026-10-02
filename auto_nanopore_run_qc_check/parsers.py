@@ -31,17 +31,28 @@ def parse_minknow_report(minknow_report_path: Path, run_id: str):
 
     sequencing_acquisitions = acquisitions_by_purpose.get('SEQUENCING', [])
     num_sequencing_acquisitions = len(sequencing_acquisitions)
-    total_read_count = 0
+    total_basecalled_read_count = 0
+    total_basecalled_pass_read_count = 0
+    percent_basecalled_reads_passed = None
     for acquisition in sequencing_acquisitions:
         acquisition_run_id = acquisition.get('acquisition_run_info', {}).get('run_id')
-        read_count = acquisition.get('acquisition_run_info' {}).get('yield_summary',{}).get('read_count')
-        if not read_count:
+        try:
+            basecalled_pass_read_count = int(acquisition.get('acquisition_run_info', {}).get('yield_summary',{}).get('basecalled_pass_read_count'))
+            basecalled_fail_read_count = int(acquisition.get('acquisition_run_info', {}).get('yield_summary',{}).get('basecalled_fail_read_count'))
+            total_basecalled_read_count += basecalled_pass_read_count + basecalled_fail_read_count
+            total_basecalled_pass_read_count += basecalled_pass_read_count
+            
+        except ValueError as e:
             log.error({'event_type': 'failed_to_collect_acquisition_read_count',
                        'sequencing_run_id': run_id,
                        'acquisition_run_id': acquisition_run_id})
-        else:
-            total_read_count += read_count
+            continue
 
-    minknow_report['total_sequencing_reads'] = total_read_count
+    percent_basecalled_reads_passed = basecalled_pass_read_count / total_basecalled_read_count * 100.0
+    minknow_report['num_acquisitions'] = num_acquisitions
+    minknow_report['num_sequencing_acquisitions'] = num_sequencing_acquisitions
+    minknow_report['total_reads'] = total_basecalled_read_count
+    minknow_report['total_passed_reads'] = total_basecalled_pass_read_count
+    minknow_report['percent_reads_passed'] = percent_basecalled_reads_passed
     
     return minknow_report

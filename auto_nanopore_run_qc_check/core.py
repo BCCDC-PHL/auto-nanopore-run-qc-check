@@ -134,7 +134,13 @@ def collect_qc_metrics(run: dict):
     else:
         log.error({"event_type": "failed_to_find_minknow_report", "sequencing_run_id": run_id})
         return None
-    qc_metrics = parsers.parse_minknow_report(minknow_report_json_path, run_id)
+    minknow_report = parsers.parse_minknow_report(minknow_report_json_path, run_id)
+
+    qc_metrics = {
+        'PercentReadsPassed': minknow_report.get('percent_reads_passed'),
+        'NumReadsPassed': minknow_report.get('total_passed_reads'),
+        'EstimatedReadN50': minknow_report.get('estimated_read_n50'),
+    }
 
     return qc_metrics
 
@@ -177,7 +183,14 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
             threshold = qc_threshold['threshold']
             checked_metric = {}
             checked_metric['metric'] = metric
-            checked_metric['value'] = qc_metrics[metric]
+            checked_metric['value'] = qc_metrics.get(metric)
+            if not checked_metric.get('value'):
+                log.error({'event_type': 'failed_to_compare_metric_value',
+                           'sequencing_run_id': run_id,
+                           'metric': metric})
+                checked_metric['pass_fail'] = "UNDETERMINED"
+                qc_check_result['checked_metrics'].append(checked_metric)
+                continue
             checked_metric['threshold'] = threshold
             checked_metric['pass_above_or_below'] = qc_threshold['pass_above_or_below']
             if qc_threshold['pass_above_or_below'] == 'above':
@@ -198,7 +211,6 @@ def qc_check(config: Config, run: dict) -> Optional[dict]:
         qc_check_result['overall_pass_fail'] = "PASS"
     qc_check_result['sequencing_run_id'] = run_id
     qc_check_result['instrument_type'] = run['instrument_type']
-    qc_check_result['run_parameters'] = run['run_parameters']
     qc_check_result['timestamp_qc_check_started'] = timestamp_qc_check_started
     qc_check_result['timestamp_qc_check_completed'] = timestamp_qc_check_completed
     qc_check_complete_output_path = os.path.join(run['path'], 'qc_check_complete.json')
