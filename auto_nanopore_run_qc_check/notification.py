@@ -65,6 +65,20 @@ def _get_access_token(email_config: dict) -> Optional[str]:
     return access_token
 
 
+def _format_thousands(value):
+    """
+    Jinja filter to format numbers with thousands separators (eg. 1297871 -> '1,297,871').
+    Non-numeric values (eg. None or strings) are returned unchanged.
+
+    :param value: The value to format
+    :return: The formatted value
+    """
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return f"{value:,}"
+
+    return value
+
+
 def _prepare_email_body(email_data: dict, notification_config: dict) -> dict:
     """
     Prepare the email request body, prior to calling notification API.
@@ -83,6 +97,7 @@ def _prepare_email_body(email_data: dict, notification_config: dict) -> dict:
     template_text = template_path.read_text()
 
     env = Environment(loader=BaseLoader())
+    env.filters['thousands'] = _format_thousands
     template = env.from_string(template_text)
     
     body = template.render(email_data)

@@ -58,8 +58,8 @@
       {% for metric in checked_metrics %}
       <tr>
         <td>{{ metric.metric }}</td>
-	<td style="text-align:right;">{{ metric.value }}</td>
-	<td style="text-align:right;">{{ metric.threshold }}</td>
+	<td style="text-align:right;">{{ metric.value | thousands }}</td>
+	<td style="text-align:right;">{{ metric.threshold | thousands }}</td>
         {% if metric.pass_fail == 'PASS' %}
         <td class="qc-pass">
 	  {% elif metric.pass_fail == 'UNDETERMINED' %}
@@ -86,7 +86,7 @@
       {% for project_id, num_samples in num_samples_by_project_id.items() %}
       <tr>
 	<td>{{ project_id }}</td>
-	<td>{{ num_samples }}</td>
+	<td>{{ num_samples | thousands }}</td>
       </tr>
       {% endfor %}
     </tbody>
