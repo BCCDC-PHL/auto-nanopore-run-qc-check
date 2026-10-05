@@ -17,12 +17,8 @@ def determine_instrument_type(run_id: str) -> InstrumentType:
     :param run_id: The sequencing run ID.
     :return: The instrument type
     """
-    instrument_type_str = "unknown"
-
     for instrument_type, regex in run_id_regex_by_instrument_type.items():
         if re.match(regex, run_id):
-            instrument_type_str = instrument_type
+            return InstrumentType(instrument_type)
 
-    instrument_type = InstrumentType(instrument_type_str)
-
-    return instrument_type
+    return InstrumentType.unknown

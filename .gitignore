@@ -1,5 +1,5 @@
 *~
-test_*
+/test_*
 projects.csv
 dev-config.json
 dev_scripts

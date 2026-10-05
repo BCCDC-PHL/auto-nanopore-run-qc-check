@@ -104,17 +104,10 @@ def configure_logging(log_level: str="info"):
 
     :param log_level: Log level ('debug', 'info', 'warning', 'error') default: 'info'
     """
-    log_level_attr = logging.INFO
-    try:
-        log_level_attr = getattr(logging, log_level.upper())
-    except AttributeError as e:
-        log_level_attr = logging.INFO
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(JSONFormatter())
     logging.basicConfig(
-        datefmt='%Y-%m-%dT%H:%M:%S',
         encoding='utf-8',
-        level=log_level_attr,
-        handlers=[logging.StreamHandler(sys.stdout)]
+        level=log_level.upper(),
+        handlers=[handler]
     )
-    logging.getLogger().handlers[0].setFormatter(JSONFormatter())
-
-    return None
