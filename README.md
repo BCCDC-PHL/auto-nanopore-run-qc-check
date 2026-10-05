@@ -37,6 +37,15 @@ uv pip install -e .
 
 This will allow any changes to the codebase to be made immediately reflected in the tool.
 
+## Testing
+
+Install `pytest` and run the tests from the root of the repo:
+
+```
+uv pip install pytest
+pytest tests
+```
+
 # Usage
 Start the tool as follows:
 
