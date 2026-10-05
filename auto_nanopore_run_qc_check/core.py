@@ -127,7 +127,7 @@ def collect_qc_metrics(run: dict):
         'NumSequencingAcquisitions': minknow_report.get('num_sequencing_acquisitions'),
         'PercentReadsPassed': minknow_report.get('percent_passed_reads'),
         'NumReadsPassed': minknow_report.get('total_passed_reads'),
-        'EstimatedReadN50': minknow_report.get('estimated_read_n50'),
+        'ReadN50': minknow_report.get('read_n50'),
     }
 
     return qc_metrics
