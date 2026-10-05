@@ -13,6 +13,7 @@ from typing import Optional, Iterator
 
 log = logging.getLogger(__name__)
 
+
 def find_samplesheet_path(run_dir: Path) -> Optional[Path]:
     """
     Given a run directory path, find the path to the SampleSheet.csv file that can be used

@@ -15,7 +15,15 @@ log = logging.getLogger(__name__)
 def parse_minknow_report(minknow_report_path: Path, run_id: str):
     """
     """
-    minknow_report = None
+    minknow_report = {
+        'num_acquisitions': None,
+        'num_sequencing_acquisitions': None,
+        'total_reads': None,
+        'total_passed_reads': None,
+        'percent_passed_reads': None,
+        'read_n50': None,
+        
+    }
     with open(minknow_report_path, 'r') as f:
         minknow_report = json.load(f)
 
@@ -53,6 +61,6 @@ def parse_minknow_report(minknow_report_path: Path, run_id: str):
     minknow_report['num_sequencing_acquisitions'] = num_sequencing_acquisitions
     minknow_report['total_reads'] = total_basecalled_read_count
     minknow_report['total_passed_reads'] = total_basecalled_pass_read_count
-    minknow_report['percent_reads_passed'] = round(percent_basecalled_reads_passed, 3)
+    minknow_report['percent_passed_reads'] = round(percent_basecalled_reads_passed, 3)
     
     return minknow_report
