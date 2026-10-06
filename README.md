@@ -75,7 +75,8 @@ This tool takes a single config file, in JSON format, with the following structu
         {
             "metric": "PercentReadsPassed",
             "threshold": 70,
-            "pass_above_or_below": "above"        },
+            "pass_above_or_below": "above"
+        },
         {
             "metric": "EstimatedReadN50",
             "threshold": 4000,
@@ -85,14 +86,14 @@ This tool takes a single config file, in JSON format, with the following structu
             "metric": "NumReadsPassed",
             "threshold": 100000,
             "pass_above_or_below": "above",
-	    "instrument_type": "gridion"
-	},
-	{
+            "instrument_type": "gridion"
+        },
+	    {
             "metric": "NumReadsPassed",
             "threshold": 500000,
             "pass_above_or_below": "above",
-	    "instrument_type": "promethion"
-	}
+            "instrument_type": "promethion"
+        }
     ]
 }
 ```
