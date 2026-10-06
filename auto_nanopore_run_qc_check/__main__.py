@@ -36,9 +36,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-c', '--config', required=True)
     parser.add_argument('--log-level', default='info', choices=['debug', 'info', 'warning', 'error'])
+    parser.add_argument('--log-file', help='Append logs to this file, rotated daily at midnight (default: log to stdout)')
+    parser.add_argument('--log-retention-days', type=int, default=90, help='Number of rotated log files to keep. 0 keeps all of them (default: 90)')
     args = parser.parse_args()
 
-    configure_logging(args.log_level)
+    configure_logging(args.log_level, args.log_file, args.log_retention_days)
     log.debug({"event_type": "debug_logging_enabled"})
 
     # Fail fast if the config is invalid at startup.
