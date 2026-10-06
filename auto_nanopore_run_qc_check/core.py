@@ -3,7 +3,7 @@ import json
 import logging
 import os
 
-from typing import Iterator
+from typing import Iterator, Optional
 from pathlib import Path
 
 import auto_nanopore_run_qc_check.parsers as parsers
@@ -37,10 +37,13 @@ def find_run_dirs(config: Config) -> Iterator[Run]:
             run_dir = Path(subdir.path).resolve()
             instrument_type = instrument.determine_instrument_type(run_id)
 
+            upload_complete_path = run_dir / 'upload_complete.json'
             conditions_checked = {
                 "is_directory": subdir.is_dir(),
                 "supported_run_id_format": instrument_type != InstrumentType.unknown,
-                "upload_complete": (run_dir / 'upload_complete.json').exists(),
+                "upload_complete": upload_complete_path.exists(),
+                # Newly-uploaded runs are only readable by the uploading user until permissions are updated.
+                "readable": os.access(run_dir, os.R_OK | os.X_OK) and os.access(upload_complete_path, os.R_OK),
                 "qc_check_not_complete": not (run_dir / 'qc_check_complete.json').exists(),
                 "not_excluded": run_id not in config.excluded_runs,
             }
@@ -86,38 +89,40 @@ def get_sum_sample_fastq_file_sizes_mb(run: Run) -> float:
     return sum_bytes / (1024 * 1024)
 
 
-def find_minknow_report(run: Run) -> Path:
+def find_minknow_report(run: Run) -> Optional[Path]:
     """
     Find the MinKNOW json report in a run directory.
 
     :param run: The sequencing run.
-    :return: Path to the report.
-    :raises FileNotFoundError: If there isn't exactly one report in the run directory.
+    :return: Path to the report, or None if there isn't one (eg. if the run was interrupted).
+    :raises ValueError: If there is more than one report in the run directory.
     """
     minknow_reports = list(run.path.glob('report_*.json'))
-    if len(minknow_reports) != 1:
-        raise FileNotFoundError(f"Expected exactly one MinKNOW report (report_*.json) in {run.path}, found {len(minknow_reports)}")
+    if len(minknow_reports) > 1:
+        raise ValueError(f"Expected at most one MinKNOW report (report_*.json) in {run.path}, found {len(minknow_reports)}")
 
-    return minknow_reports[0]
+    return minknow_reports[0] if minknow_reports else None
 
 
-def collect_qc_metrics(run: Run) -> dict:
+def collect_qc_metrics(run: Run, minknow_report_path: Optional[Path]) -> dict:
     """
     Collect the QC metrics for a run.
+    Without a MinKNOW report, the metrics that come from the report are None.
 
     :param run: The sequencing run.
+    :param minknow_report_path: Path to the MinKNOW report, or None if there isn't one.
     :return: QC metrics, by metric name.
     """
-    minknow_report_path = find_minknow_report(run)
-    log.info({"event_type": "found_minknow_report", "sequencing_run_id": run.sequencing_run_id, "minknow_report_path": str(minknow_report_path)})
-    minknow_report = parsers.parse_minknow_report(minknow_report_path)
+    minknow_report = {}
+    if minknow_report_path is not None:
+        minknow_report = parsers.parse_minknow_report(minknow_report_path)
 
     return {
-        'NumAcquisitions': minknow_report['num_acquisitions'],
-        'NumSequencingAcquisitions': minknow_report['num_sequencing_acquisitions'],
-        'PercentReadsPassed': minknow_report['percent_passed_reads'],
-        'NumReadsPassed': minknow_report['total_passed_reads'],
-        'ReadN50': minknow_report['read_n50'],
+        'NumAcquisitions': minknow_report.get('num_acquisitions'),
+        'NumSequencingAcquisitions': minknow_report.get('num_sequencing_acquisitions'),
+        'PercentReadsPassed': minknow_report.get('percent_passed_reads'),
+        'NumReadsPassed': minknow_report.get('total_passed_reads'),
+        'ReadN50': minknow_report.get('read_n50'),
         'SumSampleFastqFileSizesMb': round(get_sum_sample_fastq_file_sizes_mb(run), 2),
     }
 
@@ -166,7 +171,15 @@ def qc_check(config: Config, run: Run) -> dict:
     log.info({"event_type": "qc_check_started", "sequencing_run_id": run_id})
     timestamp_qc_check_started = datetime.datetime.now().isoformat()
 
-    qc_metrics = collect_qc_metrics(run)
+    minknow_report_path = find_minknow_report(run)
+    if minknow_report_path is None:
+        # Interrupted runs can have usable fastq files but no report. Complete the QC check
+        # anyway (metrics from the report will be UNDETERMINED) so that someone is notified.
+        log.warning({"event_type": "minknow_report_not_found", "sequencing_run_id": run_id})
+    else:
+        log.info({"event_type": "found_minknow_report", "sequencing_run_id": run_id, "minknow_report_path": str(minknow_report_path)})
+
+    qc_metrics = collect_qc_metrics(run, minknow_report_path)
     write_json(run.path / f"{run_id}_qc_metrics.json", qc_metrics)
 
     checked_metrics = []
@@ -192,6 +205,7 @@ def qc_check(config: Config, run: Run) -> dict:
         'overall_pass_fail': overall_pass_fail(checked_metrics),
         'sequencing_run_id': run_id,
         'instrument_type': run.instrument_type,
+        'minknow_report_path': str(minknow_report_path) if minknow_report_path else None,
         'timestamp_qc_check_started': timestamp_qc_check_started,
         'timestamp_qc_check_completed': datetime.datetime.now().isoformat(),
     }
