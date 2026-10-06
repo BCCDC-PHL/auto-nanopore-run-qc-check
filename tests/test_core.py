@@ -67,15 +67,17 @@ def test_find_run_dirs(tmp_path):
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root can read files regardless of permissions")
-def test_find_run_dirs_skips_unreadable_runs(tmp_path):
+@pytest.mark.parametrize('unreadable_filename', ['upload_complete.json', 'report_FBG00000_20260101_0000_00000000.json'])
+def test_find_run_dirs_skips_unreadable_runs(tmp_path, unreadable_filename):
     run_dir = make_run_dir(tmp_path)
+    (run_dir / 'report_FBG00000_20260101_0000_00000000.json').write_text('{}')
     config = Config(run_parent_dirs=[tmp_path])
 
-    (run_dir / 'upload_complete.json').chmod(0o000)
+    (run_dir / unreadable_filename).chmod(0o000)
     try:
         assert list(core.find_run_dirs(config)) == []
     finally:
-        (run_dir / 'upload_complete.json').chmod(0o644)
+        (run_dir / unreadable_filename).chmod(0o644)
 
     assert [r.sequencing_run_id for r in core.find_run_dirs(config)] == [GRIDION_RUN_ID]
 

@@ -15,6 +15,22 @@ from auto_nanopore_run_qc_check.notification import send_notification_email
 log = logging.getLogger(__name__)
 
 
+def is_readable(run_dir: Path) -> bool:
+    """
+    Check whether the files needed for the QC check are readable.
+    Newly-uploaded runs are only readable by the uploading user until permissions are updated,
+    and the run directory may be readable before the files inside it are.
+
+    :param run_dir: Path to the run directory.
+    :return: True if the run directory, 'upload_complete.json' and MinKNOW report (if present) are all readable.
+    """
+    if not os.access(run_dir, os.R_OK | os.X_OK):
+        return False
+    paths = [run_dir / 'upload_complete.json', *run_dir.glob('report_*.json')]
+
+    return all(os.access(path, os.R_OK) for path in paths)
+
+
 def find_run_dirs(config: Config) -> Iterator[Run]:
     """
     Find sequencing run directories under the 'run_parent_dirs' listed in the config
@@ -37,13 +53,11 @@ def find_run_dirs(config: Config) -> Iterator[Run]:
             run_dir = Path(subdir.path).resolve()
             instrument_type = instrument.determine_instrument_type(run_id)
 
-            upload_complete_path = run_dir / 'upload_complete.json'
             conditions_checked = {
                 "is_directory": subdir.is_dir(),
                 "supported_run_id_format": instrument_type != InstrumentType.unknown,
-                "upload_complete": upload_complete_path.exists(),
-                # Newly-uploaded runs are only readable by the uploading user until permissions are updated.
-                "readable": os.access(run_dir, os.R_OK | os.X_OK) and os.access(upload_complete_path, os.R_OK),
+                "upload_complete": (run_dir / 'upload_complete.json').exists(),
+                "readable": is_readable(run_dir),
                 "qc_check_not_complete": not (run_dir / 'qc_check_complete.json').exists(),
                 "not_excluded": run_id not in config.excluded_runs,
             }
