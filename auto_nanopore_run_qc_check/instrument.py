@@ -2,7 +2,7 @@ import re
 
 from auto_nanopore_run_qc_check.model import InstrumentType
 
-GRIDION_RUN_ID_REGEX = r"\d{8}_\d{4}_X\d_[A-Z0-9]+_\d{8}"
+GRIDION_RUN_ID_REGEX = r"\d{8}_\d{4}_X\d_[A-Z0-9]+_[a-z0-9]{8}"
 PROMETHION_RUN_ID_REGEX = r"\d{8}_\d{4}_[A-Z0-9]{3}_\d{5}-[A-Z]_[A-Z0-9]+_[a-z0-9]{8}"
 
 run_id_regex_by_instrument_type = {
