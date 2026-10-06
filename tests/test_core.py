@@ -1,4 +1,5 @@
 import json
+import os
 
 import pytest
 
@@ -65,6 +66,22 @@ def test_find_run_dirs(tmp_path):
     assert runs[0].instrument_type == InstrumentType.gridion
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root can read files regardless of permissions")
+@pytest.mark.parametrize('unreadable_filename', ['upload_complete.json', 'report_FBG00000_20260101_0000_00000000.json'])
+def test_find_run_dirs_skips_unreadable_runs(tmp_path, unreadable_filename):
+    run_dir = make_run_dir(tmp_path)
+    (run_dir / 'report_FBG00000_20260101_0000_00000000.json').write_text('{}')
+    config = Config(run_parent_dirs=[tmp_path])
+
+    (run_dir / unreadable_filename).chmod(0o000)
+    try:
+        assert list(core.find_run_dirs(config)) == []
+    finally:
+        (run_dir / unreadable_filename).chmod(0o644)
+
+    assert [r.sequencing_run_id for r in core.find_run_dirs(config)] == [GRIDION_RUN_ID]
+
+
 def test_qc_check(tmp_path, write_report):
     run_dir = make_run_dir(tmp_path)
     write_report([make_acquisition(pass_reads=900, fail_reads=100, basecalled_histogram=[(0, 10000, 1000)])], run_dir=run_dir)
@@ -83,10 +100,26 @@ def test_qc_check(tmp_path, write_report):
         assert json.load(f)['overall_pass_fail'] == 'PASS'
 
 
-def test_qc_check_without_report_raises(tmp_path):
+def test_qc_check_without_report_is_undetermined(tmp_path):
     run_dir = make_run_dir(tmp_path)
+    config = Config(qc_thresholds=[
+        {'metric': 'ReadN50', 'threshold': 4000, 'pass_above_or_below': 'above'},
+    ])
     run = Run(sequencing_run_id=GRIDION_RUN_ID, path=run_dir, instrument_type=InstrumentType.gridion)
 
-    with pytest.raises(FileNotFoundError):
+    result = core.qc_check(config, run)
+
+    assert result['overall_pass_fail'] == PassFail.UNDETERMINED
+    assert result['minknow_report_path'] is None
+    assert (run_dir / 'qc_check_complete.json').exists()
+
+
+def test_qc_check_with_multiple_reports_raises(tmp_path):
+    run_dir = make_run_dir(tmp_path)
+    (run_dir / 'report_a.json').write_text('{}')
+    (run_dir / 'report_b.json').write_text('{}')
+    run = Run(sequencing_run_id=GRIDION_RUN_ID, path=run_dir, instrument_type=InstrumentType.gridion)
+
+    with pytest.raises(ValueError):
         core.qc_check(Config(), run)
     assert not (run_dir / 'qc_check_complete.json').exists()

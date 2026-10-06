@@ -170,12 +170,15 @@ This tool will write a file named `qc_check_complete.json`, with the following f
   "overall_pass_fail": "PASS",
   "sequencing_run_id": "20260917_1024_X3_FAG67189_28701687",
   "instrument_type": "gridion",
-  "run_parameters": {
-  },
+  "minknow_report_path": "/path/to/20260917_1024_X3_FAG67189_28701687/report_FAG67189_20260917_1024_28701687.json",
   "timestamp_qc_check_started": "2026-09-18T15:45:28.074190",
   "timestamp_qc_check_completed": "2026-09-18T15:45:28.152267"
 }
 ```
+
+If a run has no MinKNOW report (`report_*.json`), which can happen when a run is interrupted, the QC check still completes.
+`minknow_report_path` will be `null`, metrics that come from the report will have a `null` value and an `UNDETERMINED` result,
+and the notification email will say that the report was missing.
 
 # Logging
 This tool outputs [structured logs](https://www.honeycomb.io/blog/structured-logging-and-your-team/) in [JSON Lines](https://jsonlines.org/) format:

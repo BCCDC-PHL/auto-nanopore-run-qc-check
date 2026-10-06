@@ -44,6 +44,13 @@
     {{ overall_pass_fail }}
   </h1>
   
+  {% if minknow_report_path is none %}
+  <p class="qc-warning">
+    No MinKNOW report (report_*.json) was found for this run, so metrics from the report couldn't be checked.
+    This can happen if the run was interrupted.
+  </p>
+  {% endif %}
+
   <h3>Run-Level QC Metrics</h3>
   <table>
     <thead>

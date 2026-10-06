@@ -52,10 +52,17 @@ def main():
                 config = reload_config(args.config, config)
                 try:
                     core.qc_check(config, run)
+                # A problem with one run shouldn't stop other runs from being checked.
+                # No 'qc_check_complete.json' is written, so the run will be retried on the next scan.
+                except OSError as e:
+                    # Expected, environmental problems (missing files, permissions, network storage).
+                    # The message says what went wrong, so a traceback wouldn't add anything.
+                    log.error({"event_type": "qc_check_failed", "sequencing_run_id": run.sequencing_run_id,
+                               "error_type": type(e).__name__, "error": str(e)})
                 except Exception as e:
-                    # A problem with one run shouldn't stop other runs from being checked.
-                    # No 'qc_check_complete.json' is written, so the run will be retried on the next scan.
-                    log.error({"event_type": "qc_check_failed", "sequencing_run_id": run.sequencing_run_id, "error": str(e)}, exc_info=True)
+                    # Unexpected problems are probably bugs, so include the traceback.
+                    log.error({"event_type": "qc_check_failed", "sequencing_run_id": run.sequencing_run_id,
+                               "error_type": type(e).__name__, "error": str(e)}, exc_info=True)
 
             scan_duration_seconds = (datetime.datetime.now() - scan_start_timestamp).total_seconds()
             next_scan_timestamp = scan_start_timestamp + datetime.timedelta(seconds=config.scan_interval_seconds)
