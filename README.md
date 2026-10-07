@@ -61,6 +61,16 @@ More detailed logs can be produced by controlling the log level using the `--log
 auto-nanopore-run-qc-check --config config.json --log-level debug
 ```
 
+By default, logs are written to stdout. To write them to a file instead, use the `--log-file` flag:
+
+```bash
+auto-nanopore-run-qc-check --config config.json --log-file logs/auto-nanopore-run-qc-check.jsonl
+```
+
+The log file is appended to (not overwritten) when the tool is restarted, and it's rotated at midnight.
+Each rotated log is named with the date it covers (eg. `auto-nanopore-run-qc-check.jsonl.2026-10-05`).
+The last 90 rotated logs are kept, and older ones are deleted. This can be changed with `--log-retention-days` (use `0` to keep all of them).
+
 # Configuration
 This tool takes a single config file, in JSON format, with the following structure:
 
